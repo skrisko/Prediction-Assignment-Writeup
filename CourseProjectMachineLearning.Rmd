@@ -1,0 +1,129 @@
+---
+title: "Coursera course project Machine Learning: Human Activity Regognition"
+author: "Skrisko"
+date: "11 juillet 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Due to recent techonlogical evolution it is now possible to colect large amout of data with wearable sensor. In this project data from accelerometes on the belt, forearm, and dumbell of 6 participants will be used. The participant were asked to perform barell lifts correctly and incorrectly in 5 different ways. The aim is to find a machine learning algorithm that will classified the differents a testing set into this categories based on the data from the sensors. You can find more data here: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har >
+
+## Set up
+
+First we will load the different library and the data. 
+We don't show the console for loading the library. 
+```{r, echo=FALSE}
+library(caret)
+library(gbm)
+library(readr)
+library(dplyr)
+library(e1071)
+library(rpart)
+library(ggplot2)
+library(lattice)
+library(knitr)
+```
+
+We download the data. 
+
+```{r, warning=FALSE}
+adresseTrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+adresseTest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+## setwd("R/CourseProject8")
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+```
+
+## Exploratory Data Analysis
+
+We can start with a quick overview of the data. do have a quick overview of the data. 
+
+```{r}
+head(training, n=3)
+```
+
+## Sorting the data
+
+Like we see it during the course the first step is to clean the data. 
+
+We start by removing the user, name, the date as we want to identify the activity by the data from sensor and not from the users. 
+```{r}
+toRemove <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window")
+training <- select(training , -toRemove)
+```
+
+We can see that there is column with a lot of NA, and we dont want to make a prediction based on predictor that are the most of the time NA. We remove column where there is the most of the time blank or NA. 
+
+```{r}
+
+NotComplet <- apply(training, MARGIN = 2, FUN = function(x) sum(is.na(x)))
+training <- training[, names(NotComplet[NotComplet < 100])]
+
+Blank <- apply(training, MARGIN = 2, FUN = function(x) sum(x==""))
+training <- training[, names(Blank[Blank<100])]
+```
+
+We do the same for the testing set. But keep the problem id as there is no classe specified for the testing set.
+```{r}
+testing <- select(testing, names(training[0:53]), "problem_id")
+```
+
+
+## The model
+
+We don't want to overfit the model, and to test our model we need a set of data where the classe are given. Therefore we split the training data into two sub groupe. subTraining and subTesting. The methode is given in the slide of the first week of course and we respect the ration 3/4 for the remaining training data and 1/4 for the testing data. 
+
+Then we do the preprocessing to avoir biais we center and scale the data. And then we put in place a control for the training function based on a repeated cross validation.It split the data each time and give a more robust model. It is a way to increase in our case the accuracy. 
+
+```{r}
+set.seed(253)
+inTrain = createDataPartition(training$classe, p = 3/4)[[1]]
+subTraining = training[ inTrain,]
+subTesting = training[-inTrain,]
+preProc <- c("center", "scale")
+
+control <- trainControl(method="repeatedcv", number =3, repeats = 2)
+```
+
+## Training the model
+
+We don't incude the result of the R console because it is to long. 
+
+We store our model in modFit like during the course. We train the model on all predictor. Based on the subset of the training set. We specify our preprocessing and our control. The methode choosen is the gradient bossting model. 
+
+```{r, results= "hide"}
+modFit <- train(classe~., method = "gbm", data = subTraining, metric= "Accuracy", preProcess = preProc, trControl = control)
+```
+
+## The analyze of the classifier
+
+We print the model that was selected and the result of the accuracy at each step of the process. We plot the model to see the evolution of it. 
+```{r}
+print(modFit)
+plot(modFit)
+```
+
+## The prediction on the first testing set
+
+We can now see the result on the testing set that come from the original training set. We see that there is only few error and the accuracy is quite good. The classe C is the one that have the worst result but still very good. 
+```{r}
+pred <- predict(modFit, subTesting)
+confusionMatrix(subTesting$classe, pred)
+```
+## Final testing on the real testing set
+
+We can do the final testing on the where we don't know the classe of but we only have the problem id. 
+```{r}
+predFinal <- predict(modFit, testing)
+summary(predFinal)
+```
+
+## Conclusion
+
+We have use what we have learn during the 4 week of machine learning course. We have start with raw data, we have clean it. Then we have prepare our analyse with a training set a validation set and a testing set to avoir overfitting. After this we have build the the training function with a control and a preprocessing of the data. We have analyze the predictor and then the accuracy with the validation set. ANd finaly we have applied it to the testing set. With this exercice we went through all the step of a machine learning problem. And try to use all the technique we see during the course. 
